@@ -15,7 +15,8 @@ lgb_space = {
     'max_depth': hp.quniform('max_depth', 6, 30, 1),
     'min_data_in_leaf': hp.quniform('min_data_in_leaf', 20, 1000, 5),
     'min_split_gain': hp.uniform('min_split_gain', 0.0, 5.0),
-    'min_sum_hessian_in_leaf': hp.uniform('min_sum_hessian_in_leaf', 0.0, 10.0),
     'reg_alpha': hp.uniform('reg_alpha', 0.0, 10.0),
     'reg_lambda': hp.uniform('reg_lambda', 0.0, 10.0)
 }
+
+# 'min_sum_hessian_in_leaf': hp.uniform('min_sum_hessian_in_leaf', 0.0, 10.0),

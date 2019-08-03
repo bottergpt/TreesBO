@@ -15,6 +15,15 @@ from sklearn.metrics import make_scorer
 import xgboost as xgb
 import lightgbm as lgb
 import logging
+from .base_config import *
+if TASK.lower() in ['regression', 'r']:
+    from .space_config.regression import SPACE_DICT
+elif TASK.lower() in ['classification', 'c']:
+    from .space_config.classification import SPACE_DICT
+else:
+    raise ValueError(
+        "TASK should be string, and its lowercase value should be in ['regression', 'r'] or 'classification', 'c']"
+    )
 
 def sk_cv(model_nm, params, X_train, y_train, cv):
 
@@ -154,9 +163,11 @@ def objective_base(params,
                                          'trials_%s.csv' % random_datetime)
         if not os.path.exists(hyper_base_path):
             os.makedirs(hyper_base_path)
-            logging.info(" No trial file directory <hyperopt_output> exists, will be created...")
+            print(
+                "No trial file directory <hyperopt_output> exists, will be created..."
+            )
         if os.path.exists(trial_file) and _ITERATION == 1:
-            logging.info(" Trial file exists, will be renamed...")
+            print("Trial file exists, will be renamed...")
             os.rename(trial_file, trial_file_rename)
             assert os.path.exists(
                 trial_file
@@ -286,8 +297,8 @@ def post_hyperopt(bayes_trials, train_set, model_nm, folds=None, nfold=5):
     if loss>=_best_loss: # score of LR_0.01 is worse than that of LR_0.05
         if model_nm not in ['rf', 'et']: # for GBDT
             logging.info("====================================================================================")
-            logging.warning("model scores of LR_0.01 is worse than that of LR_0.05, LR_0.05 will be used instead!")
-            logging.warning(f"before(LR_0.05): {_best_loss}, best n_estimators: {_best_estimators} | after(LR_0.01): {loss}, best n_estimators: {n_estimators}")
+            logging.warn("model scores of LR_0.01 is worse than that of LR_0.05, LR_0.05 will be used instead!")
+            logging.warn(f"before(LR_0.05): {_best_loss}, best n_estimators: {_best_estimators} | after(LR_0.01): {loss}, best n_estimators: {n_estimators}")
             n_estimators = _best_estimators
             loss = _best_loss
             best_params['n_estimators'] = n_estimators
@@ -298,8 +309,8 @@ def post_hyperopt(bayes_trials, train_set, model_nm, folds=None, nfold=5):
             logging.info(f"best params: {best_params}")
         else:
             logging.info("====================================================================================")
-            logging.warning("model scores of 1000 Trees is worse than that of 200 Trees, 200 Trees will be used instead!")
-            logging.warning(f"before(200): {_best_loss}, best n_estimators: {_best_estimators} | after(1000): {loss}, best n_estimators: {n_estimators}")
+            logging.warn("model scores of 1000 Trees is worse than that of 200 Trees, 200 Trees will be used instead!")
+            logging.warn(f"before(200): {_best_loss}, best n_estimators: {_best_estimators} | after(1000): {loss}, best n_estimators: {n_estimators}")
             n_estimators = _best_estimators
             loss = _best_loss
             best_params['n_estimators'] = n_estimators
