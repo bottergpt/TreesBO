@@ -1,5 +1,5 @@
 """
-Bayesian Optimization
+Bayesian Optimization For Tree Models
 """
 import os
 import csv
@@ -11,19 +11,74 @@ import pandas as pd
 from functools import partial
 from sklearn.model_selection import cross_val_score
 from sklearn.ensemble import RandomForestRegressor, ExtraTreesRegressor
-from sklearn.metrics import make_scorer
 import xgboost as xgb
 import lightgbm as lgb
 import logging
-from .base_config import *
-if TASK.lower() in ['regression', 'r']:
-    from .space_config.regression import SPACE_DICT
-elif TASK.lower() in ['classification', 'c']:
-    from .space_config.classification import SPACE_DICT
-else:
-    raise ValueError(
-        "TASK should be string, and its lowercase value should be in ['regression', 'r'] or 'classification', 'c']"
-    )
+from sklearn.metrics import make_scorer
+
+BASE_DIR = os.getcwd()  # current working directory
+
+
+def parse_metric(metrics):
+    global ET_RF_SCORER, ET_RF_METRIC, LGB_METRIC, XGB_METRIC
+    if metrics.upper() in ['L2', 'RMSE']:
+
+        def _calc_rmse(y, y_pred):
+            return np.sqrt(np.mean((y - y_pred)**2))
+
+        # Creating root mean square error for sklearns crossvalidation
+        ET_RF_SCORER = make_scorer(_calc_rmse, greater_is_better=False)
+        ET_RF_METRIC = 'mse'
+        LGB_METRIC = 'rmse'
+        XGB_METRIC = 'rmse'
+    elif metrics.upper() in ['L1']:
+        ET_RF_SCORER = 'neg_mean_absolute_error'
+        ET_RF_METRIC = 'mae'
+        LGB_METRIC = 'l1'
+        XGB_METRIC = 'mae'
+    else:
+        raise ValueError(f"metrics: {metrics} is not supported now!")
+
+
+
+def load_space(task):
+    if task.lower() in ['regression', 'r']:
+        from .space_config.regression import SPACE_DICT
+    elif task.lower() in ['classification', 'c']:
+        from .space_config.classification import SPACE_DICT
+    else:
+        raise ValueError(
+            "TASK should be string, and its lowercase value should be in ['regression', 'r'] or 'classification', 'c']"
+        )
+    return SPACE_DICT
+
+
+def parse_model_nm(model_nm):
+
+    if model_nm.lower() in ['lgbm', 'lightgbm', 'lgb']:
+        model_nm = 'LGB'
+    elif model_nm.lower() in ['xgb', 'xgboost']:
+        model_nm = 'XGB'
+    elif model_nm.lower() in ['rf', 'randomforest']:
+        model_nm = 'RF'
+    elif model_nm.lower() in ['et', 'extratrees']:
+        model_nm = 'ET'
+    else:
+        raise ValueError(f"model_nm: {model_nm} is a bug...")
+    return model_nm
+
+
+def update_metric(space, model_nm):
+    if model_nm == 'LGB':
+        space['metric'] = LGB_METRIC
+    elif model_nm == 'XGB':
+        space['eval_metric'] = XGB_METRIC
+    elif model_nm in ['ET', 'RF']:
+        space['criterion'] = ET_RF_METRIC
+    else:
+        raise ValueError(f"model_nm: {model_nm} is a bug...")
+    return space
+
 
 def sk_cv(model_nm, params, X_train, y_train, cv):
 
@@ -35,11 +90,6 @@ def sk_cv(model_nm, params, X_train, y_train, cv):
     else:
         raise ValueError(f"model_nm: {model_nm} is not supported now! ")
 
-    def calc_rmse(y, y_pred):
-        return np.sqrt(np.mean((y - y_pred)**2))
-
-    # Creating root mean square error for sklearns crossvalidation
-    rmse_scorer = make_scorer(calc_rmse, greater_is_better=False)
     scores = cross_val_score(sk_model,
                              X_train,
                              y_train,
@@ -47,7 +97,7 @@ def sk_cv(model_nm, params, X_train, y_train, cv):
                              n_jobs=-1,
                              pre_dispatch=10,
                              verbose=0,
-                             scoring=rmse_scorer)
+                             scoring=ET_RF_SCORER)
     return scores
 
 
@@ -103,14 +153,14 @@ def objective_base(params,
                          categorical_feature='auto',
                          early_stopping_rounds=100,
                          fpreproc=None,
-                         verbose_eval=10,
+                         verbose_eval=30,
                          show_stdv=True,
                          seed=0,
                          callbacks=None)
-        # Extract the min rmse, Loss must be minimized
-        loss = np.min(cv_dict['rmse-mean'])
-        # Boosting rounds that returned the lowest cv rmse
-        n_estimators = int(np.argmin(cv_dict['rmse-mean']) + 1)
+        # Extract the min rmse/mae, Loss must be minimized
+        loss = np.min(cv_dict['%s-mean' % LGB_METRIC])
+        # Boosting rounds that returned the lowest cv rmse/mae
+        n_estimators = int(np.argmin(cv_dict['%s-mean' % LGB_METRIC]) + 1)
     elif model_nm in ['xgboost', 'xgb']:
         cv_dict = xgb.cv(params,
                          train_set,
@@ -120,14 +170,15 @@ def objective_base(params,
                          folds=folds,
                          early_stopping_rounds=100,
                          as_pandas=False,
-                         verbose_eval=10,
+                         verbose_eval=30,
                          seed=0,
                          shuffle=False)
 
-        # Extract the min rmse, Loss must be minimized
-        loss = np.min(cv_dict['test-rmse-mean'])
-        # Boosting rounds that returned the lowest cv rmse
-        n_estimators = int(np.argmin(cv_dict['test-rmse-mean']) + 1)
+        # Extract the min rmse/mae, Loss must be minimized
+        loss = np.min(cv_dict['test-%s-mean' % XGB_METRIC])
+        # Boosting rounds that returned the lowest cv rmse/mae
+        n_estimators = int(
+            np.argmin(cv_dict['test-%s-mean' % XGB_METRIC]) + 1)
 
     elif model_nm in ['rf', 'et']:
         try:
@@ -147,9 +198,12 @@ def objective_base(params,
                        X_train=X_train,
                        y_train=y_train,
                        cv=cv)
-        # Extract the min rmse, Loss must be minimized
-        loss = -scores.mean()
-        # Boosting rounds that returned the lowest cv rmse
+        # Extract the min rmse/mae, Loss must be minimized
+        loss = -scores.mean()  # scores returns negative!
+
+        # All scorer objects follow the convention that higher return values are better than lower return values.
+        # Thus metrics which measure the distance between the model and the data, like metrics.mean_squared_error,
+        # are available as neg_mean_squared_error which return the negated value of the metric.
         n_estimators = params['n_estimators']
     else:
         raise ValueError("No such model...")
@@ -227,10 +281,12 @@ def post_hyperopt(bayes_trials, train_set, model_nm, folds=None, nfold=5):
     bayes_results = bayes_results.sort_values(by='loss')
     bayes_results.reset_index(drop=True, inplace=True)
     best_params = bayes_results.loc[0, 'params']
-    _best_loss = bayes_results.loc[0, 'loss'] # best loss with big learning rate
-    _best_estimators = bayes_results.loc[0, 'estimators'] # best n_estimators with big learning rate
-    
-#     print(f"best_loss_:{best_loss_}")
+    # best loss with big learning rate
+    _best_loss = bayes_results.loc[0, 'loss']
+    # best n_estimators with big learning rate
+    _best_estimators = bayes_results.loc[0, 'estimators']
+
+    #     print(f"best_loss_:{best_loss_}")
     if model_nm in ['xgboost', 'xgb']:
         # get best loss and trees
         best_params['learning_rate'] = 0.01
@@ -244,12 +300,13 @@ def post_hyperopt(bayes_trials, train_set, model_nm, folds=None, nfold=5):
                          shuffle=False,
                          early_stopping_rounds=100,
                          as_pandas=False,
-                         verbose_eval=10,
+                         verbose_eval=30,
                          seed=2019)
-        # Extract the min rmse, Loss must be minimized
-        loss = np.min(cv_dict['test-rmse-mean'])
-        # Boosting rounds that returned the lowest cv rmse
-        n_estimators = int(np.argmin(cv_dict['test-rmse-mean']) + 1)
+        # Extract the min rmse/mae, Loss must be minimized
+        loss = np.min(cv_dict['test-%s-mean' % XGB_METRIC])
+        # Boosting rounds that returned the lowest cv rmse/mae
+        n_estimators = int(
+            np.argmin(cv_dict['test-%s-mean' % XGB_METRIC]) + 1)
         best_params['n_estimators'] = n_estimators
 
     elif model_nm in ['lgb', 'lgbm', 'lightgbm']:
@@ -266,12 +323,12 @@ def post_hyperopt(bayes_trials, train_set, model_nm, folds=None, nfold=5):
                          feature_name='auto',
                          categorical_feature='auto',
                          early_stopping_rounds=100,
-                         verbose_eval=10,
+                         verbose_eval=30,
                          seed=2019)
-        # Extract the min rmse, Loss must be minimized
-        loss = np.min(cv_dict['rmse-mean'])
-        # Boosting rounds that returned the lowest cv rmse
-        n_estimators = int(np.argmin(cv_dict['rmse-mean']) + 1)
+        # Extract the min rmse/mae, Loss must be minimized
+        loss = np.min(cv_dict['%s-mean' % LGB_METRIC])
+        # Boosting rounds that returned the lowest cv rmse/mae
+        n_estimators = int(np.argmin(cv_dict['%s-mean' % LGB_METRIC]) + 1)
         best_params['n_estimators'] = n_estimators
 
     elif model_nm in ['rf', 'et']:
@@ -290,66 +347,78 @@ def post_hyperopt(bayes_trials, train_set, model_nm, folds=None, nfold=5):
         loss = -scores.mean()
     else:
         raise ValueError(f"model_nm: {model_nm} is a bug...")
-        
+
     logging.info(f"best loss: {loss}, best n_estimators: {n_estimators}")
     logging.info(f"best params: {best_params}")
-    
-    if loss>=_best_loss: # score of LR_0.01 is worse than that of LR_0.05
-        if model_nm not in ['rf', 'et']: # for GBDT
-            logging.info("====================================================================================")
-            logging.warn("model scores of LR_0.01 is worse than that of LR_0.05, LR_0.05 will be used instead!")
-            logging.warn(f"before(LR_0.05): {_best_loss}, best n_estimators: {_best_estimators} | after(LR_0.01): {loss}, best n_estimators: {n_estimators}")
+
+    if loss >= _best_loss:  # score of LR_0.01 is worse than that of LR_0.05
+        if model_nm not in ['rf', 'et']:  # for GBDT
+            logging.info(
+                "===================================================================================="
+            )
+            logging.warn(
+                "model scores of LR_0.01 is worse than that of LR_0.05, LR_0.05 will be used instead!"
+            )
+            logging.warn(
+                f"before(LR_0.05): {_best_loss}, best n_estimators: {_best_estimators} | after(LR_0.01): {loss}, best n_estimators: {n_estimators}"
+            )
             n_estimators = _best_estimators
             loss = _best_loss
             best_params['n_estimators'] = n_estimators
             best_params['learning_rate'] = 0.05
-            logging.info("====================================================================================")
+            logging.info(
+                "===================================================================================="
+            )
             logging.info("After adjustment...")
-            logging.info(f"best loss: {loss}, best n_estimators: {n_estimators}")
+            logging.info(
+                f"best loss: {loss}, best n_estimators: {n_estimators}")
             logging.info(f"best params: {best_params}")
         else:
-            logging.info("====================================================================================")
-            logging.warn("model scores of 1000 Trees is worse than that of 200 Trees, 200 Trees will be used instead!")
-            logging.warn(f"before(200): {_best_loss}, best n_estimators: {_best_estimators} | after(1000): {loss}, best n_estimators: {n_estimators}")
+            logging.info(
+                "===================================================================================="
+            )
+            logging.warn(
+                "model scores of 1000 Trees is worse than that of 200 Trees, 200 Trees will be used instead!"
+            )
+            logging.warn(
+                f"before(200): {_best_loss}, best n_estimators: {_best_estimators} | after(1000): {loss}, best n_estimators: {n_estimators}"
+            )
             n_estimators = _best_estimators
             loss = _best_loss
             best_params['n_estimators'] = n_estimators
-            logging.info("====================================================================================")
+            logging.info(
+                "===================================================================================="
+            )
             logging.info("After adjustment...")
-            logging.info(f"best loss: {loss}, best n_estimators: {n_estimators}")
+            logging.info(
+                f"best loss: {loss}, best n_estimators: {n_estimators}")
             logging.info(f"best params: {best_params}")
-            
+
     return best_params, loss
 
 
 def main_tuning_with_bo(X_train,
                         y_train,
-                        model_nm=MODEL_NM,
-                        max_evals=MAX_EVALS,
-                        folds=FOLDS,
-                        nfold=NFOLD):
+                        model_nm,
+                        max_evals=100,
+                        folds=5,
+                        nfold=None,
+                        eval_metric='l2',
+                        task='regression'):
 
+    SPACE_DICT = load_space(task)
+    parse_metric(eval_metric)
     # Keep track of results
     bayes_trials = Trials()
     # Global variable
     global _ITERATION
     _ITERATION = 0
-
-    if model_nm.lower() in ['lgbm', 'lightgbm', 'lgb']:
-        model_nm = 'LGB'
-    elif model_nm.lower() in ['xgb', 'xgboost']:
-        model_nm = 'XGB'
-    elif model_nm.lower() in ['rf', 'randomforest']:
-        model_nm = 'RF'
-    elif model_nm.lower() in ['et', 'extratrees']:
-        model_nm = 'ET'
-    else:
-        raise ValueError(f"model_nm: {model_nm} is a bug...")
-
+    model_nm = parse_model_nm(model_nm)
     TRAIN_SET = build_train_set(X_train, y_train, model_nm=model_nm)
     #     SPACE_DICT ={'RF':rf_space, 'ET':et_space, 'XGB':xgb_space, 'LGB':lgb_space}
     SPACE = SPACE_DICT[model_nm]
-
+    # update metric key in SPACE
+    SPACE = update_metric(space=SPACE, model_nm=model_nm)
     # (params, train_set, model_nm='LGBM', folds=None, nfold=5, writetoFile=True)
     func_objective = partial(objective_base,
                              train_set=TRAIN_SET,
