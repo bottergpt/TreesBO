@@ -15,17 +15,15 @@ import xgboost as xgb
 import lightgbm as lgb
 import logging
 from sklearn.metrics import make_scorer
+from .utils import *
 
 BASE_DIR = os.getcwd()  # current working directory
-
 
 def parse_metric(metrics):
     global ET_RF_SCORER, ET_RF_METRIC, LGB_METRIC, XGB_METRIC
     if metrics.upper() in ['L2', 'RMSE']:
-
         def _calc_rmse(y, y_pred):
             return np.sqrt(np.mean((y - y_pred)**2))
-
         # Creating root mean square error for sklearns crossvalidation
         ET_RF_SCORER = make_scorer(_calc_rmse, greater_is_better=False)
         ET_RF_METRIC = 'mse'
@@ -39,35 +37,6 @@ def parse_metric(metrics):
     else:
         raise ValueError(f"metrics: {metrics} is not supported now!")
 
-
-
-def load_space(task):
-    if task.lower() in ['regression', 'r']:
-        from .space_config.regression import SPACE_DICT
-    elif task.lower() in ['classification', 'c']:
-        from .space_config.classification import SPACE_DICT
-    else:
-        raise ValueError(
-            "TASK should be string, and its lowercase value should be in ['regression', 'r'] or 'classification', 'c']"
-        )
-    return SPACE_DICT
-
-
-def parse_model_nm(model_nm):
-
-    if model_nm.lower() in ['lgbm', 'lightgbm', 'lgb']:
-        model_nm = 'LGB'
-    elif model_nm.lower() in ['xgb', 'xgboost']:
-        model_nm = 'XGB'
-    elif model_nm.lower() in ['rf', 'randomforest']:
-        model_nm = 'RF'
-    elif model_nm.lower() in ['et', 'extratrees']:
-        model_nm = 'ET'
-    else:
-        raise ValueError(f"model_nm: {model_nm} is a bug...")
-    return model_nm
-
-
 def update_metric(space, model_nm):
     if model_nm == 'LGB':
         space['metric'] = LGB_METRIC
@@ -78,8 +47,7 @@ def update_metric(space, model_nm):
     else:
         raise ValueError(f"model_nm: {model_nm} is a bug...")
     return space
-
-
+    
 def sk_cv(model_nm, params, X_train, y_train, cv):
 
     model_nm = model_nm.lower()
@@ -119,7 +87,6 @@ def objective_base(params,
     # Keep track of evals
     global _ITERATION
     _ITERATION += 1
-
     # Make sure parameters that need to be integers are integers
     for parameter_name in [
             'num_leaves', 'max_depth', 'bagging_freq', 'min_data_in_leaf',
@@ -127,9 +94,7 @@ def objective_base(params,
     ]:
         if parameter_name in params:
             params[parameter_name] = int(params[parameter_name])
-
     start = timer()
-
     logging.info(f"{_ITERATION} ITERATION")
     logging.info(f"params:\n{params}")
     logging.info("############################")
@@ -177,8 +142,7 @@ def objective_base(params,
         # Extract the min rmse/mae, Loss must be minimized
         loss = np.min(cv_dict['test-%s-mean' % XGB_METRIC])
         # Boosting rounds that returned the lowest cv rmse/mae
-        n_estimators = int(
-            np.argmin(cv_dict['test-%s-mean' % XGB_METRIC]) + 1)
+        n_estimators = int(np.argmin(cv_dict['test-%s-mean' % XGB_METRIC]) + 1)
 
     elif model_nm in ['rf', 'et']:
         try:
@@ -246,7 +210,6 @@ def objective_base(params,
         'status': STATUS_OK
     }
 
-
 def build_train_set(X_train, y_train, model_nm):
 
     isX_df = isinstance(X_train, pd.DataFrame)
@@ -305,8 +268,7 @@ def post_hyperopt(bayes_trials, train_set, model_nm, folds=None, nfold=5):
         # Extract the min rmse/mae, Loss must be minimized
         loss = np.min(cv_dict['test-%s-mean' % XGB_METRIC])
         # Boosting rounds that returned the lowest cv rmse/mae
-        n_estimators = int(
-            np.argmin(cv_dict['test-%s-mean' % XGB_METRIC]) + 1)
+        n_estimators = int(np.argmin(cv_dict['test-%s-mean' % XGB_METRIC]) + 1)
         best_params['n_estimators'] = n_estimators
 
     elif model_nm in ['lgb', 'lgbm', 'lightgbm']:
