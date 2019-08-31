@@ -19,23 +19,36 @@ from .utils import *
 
 BASE_DIR = os.getcwd()  # current working directory
 
+
 def parse_metric(metrics):
     global ET_RF_SCORER, ET_RF_METRIC, LGB_METRIC, XGB_METRIC
     if metrics.upper() in ['L2', 'RMSE']:
+
         def _calc_rmse(y, y_pred):
             return np.sqrt(np.mean((y - y_pred)**2))
+
         # Creating root mean square error for sklearns crossvalidation
         ET_RF_SCORER = make_scorer(_calc_rmse, greater_is_better=False)
         ET_RF_METRIC = 'mse'
         LGB_METRIC = 'rmse'
         XGB_METRIC = 'rmse'
     elif metrics.upper() in ['L1']:
-        ET_RF_SCORER = 'neg_mean_absolute_error'
-        ET_RF_METRIC = 'mae'
+        #         ET_RF_SCORER = 'neg_mean_absolute_error'
+        #         ET_RF_METRIC = 'mae'
+        def _calc_rmse(y, y_pred):
+            return np.sqrt(np.mean((y - y_pred)**2))
+
+        # Creating root mean square error for sklearns crossvalidation
+        ET_RF_SCORER = make_scorer(_calc_rmse, greater_is_better=False)
+        ET_RF_METRIC = 'mse'
+        logging.warn(
+            f" sklearn's RF or ET is quite slow to train when using L1 criterion! \nSo it will be used L2 istead here!"
+        )
         LGB_METRIC = 'l1'
         XGB_METRIC = 'mae'
     else:
         raise ValueError(f"metrics: {metrics} is not supported now!")
+
 
 def update_metric(space, model_nm):
     if model_nm == 'LGB':
@@ -47,7 +60,8 @@ def update_metric(space, model_nm):
     else:
         raise ValueError(f"model_nm: {model_nm} is a bug...")
     return space
-    
+
+
 def sk_cv(model_nm, params, X_train, y_train, cv):
 
     model_nm = model_nm.lower()
@@ -209,6 +223,7 @@ def objective_base(params,
         'train_time': run_time,
         'status': STATUS_OK
     }
+
 
 def build_train_set(X_train, y_train, model_nm):
 
