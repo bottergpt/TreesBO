@@ -22,7 +22,7 @@ BASE_DIR = os.getcwd()  # current working directory
 
 def parse_metric(metrics):
     global ET_RF_SCORER, ET_RF_METRIC, LGB_METRIC, XGB_METRIC
-    if metrics.upper() in ['L2', 'RMSE']:
+    if metrics.upper() in ['L2', 'RMSE']: # L2 and rmse are combined here
 
         def _calc_rmse(y, y_pred):
             return np.sqrt(np.mean((y - y_pred)**2))
@@ -85,16 +85,16 @@ def sk_cv(model_nm, params, X_train, y_train, cv):
 
 def objective_base(params,
                    train_set,
+                   val_set=None,
                    model_nm='LGBM',
-                   use_cv=True,
                    folds=None,
                    nfold=5,
                    writetoFile=True):
     """
     Objective function for Gradient Boosting Machine Hyperparameter Optimization
     Args:
+        val_set: default None, if not None, train_test_split will be used.
         folds: This argument has highest priority over other data split arguments.
-        use_cv: boolean, default True, if False, train_test_split will be used.
     
     Return:
     
@@ -117,82 +117,93 @@ def objective_base(params,
     logging.info(f"{model_nm} CV Running...")
     logging.info("############################")
 
-    if not use_cv:
-        pass
-        
-
-
-    if model_nm in ['lightgbm', 'lgbm', 'lgb']:
-        # Perform n_folds cross validation
-        cv_dict = lgb.cv(params,
-                         train_set,
-                         num_boost_round=5000,
-                         folds=folds,
-                         nfold=nfold,
-                         stratified=False,
-                         shuffle=False,
-                         metrics=None,
-                         fobj=None,
-                         feval=None,
-                         init_model=None,
-                         feature_name='auto',
-                         categorical_feature='auto',
-                         early_stopping_rounds=100,
-                         fpreproc=None,
-                         verbose_eval=30,
-                         show_stdv=True,
-                         seed=0,
-                         callbacks=None)
-        # Extract the min rmse/mae, Loss must be minimized
-        loss = np.min(cv_dict['%s-mean' % LGB_METRIC])
-        # Boosting rounds that returned the lowest cv rmse/mae
-        n_estimators = int(np.argmin(cv_dict['%s-mean' % LGB_METRIC]) + 1)
-    elif model_nm in ['xgboost', 'xgb']:
-        cv_dict = xgb.cv(params,
-                         train_set,
-                         num_boost_round=5000,
-                         nfold=nfold,
-                         stratified=False,
-                         folds=folds,
-                         early_stopping_rounds=100,
-                         as_pandas=False,
-                         verbose_eval=30,
-                         seed=0,
-                         shuffle=False)
-
-        # Extract the min rmse/mae, Loss must be minimized
-        loss = np.min(cv_dict['test-%s-mean' % XGB_METRIC])
-        # Boosting rounds that returned the lowest cv rmse/mae
-        n_estimators = int(np.argmin(cv_dict['test-%s-mean' % XGB_METRIC]) + 1)
-
-    elif model_nm in ['rf', 'et']:
-        try:
-            X_train, y_train = train_set
-        except Exception as e:
-            print("Error in assignment..", e)
-            print(
-                "train_set should be a tuple or list containing <X_train, y_train>"
-            )
-            raise
-        if nfold is None:
-            cv = folds
+    if val_set is not None:
+        if model_nm in ['lightgbm', 'lgbm', 'lgb']:
+            model_lgb = lgb.train(params,
+                                  train_set,
+                                  num_boost_round=5000,
+                                  valid_sets=[val_set],
+                                  early_stopping_rounds=200)
+            
+            loss = model_lgb.best_score['valid_1'][LGB_METRIC] # use the first eval metric for default
+            n_estimators = gbm.best_iteration
         else:
-            cv = nfold
-        scores = sk_cv(model_nm=model_nm,
-                       params=params,
-                       X_train=X_train,
-                       y_train=y_train,
-                       cv=cv)
-        # Extract the min rmse/mae, Loss must be minimized
-        loss = -scores.mean()  # scores returns negative!
+            ### Todo ###
+            raise ValeError(f"{model_nm} is not supported now!")
 
-        # All scorer objects follow the convention that higher return values are better than lower return values.
-        # Thus metrics which measure the distance between the model and the data, like metrics.mean_squared_error,
-        # are available as neg_mean_squared_error which return the negated value of the metric.
-        
-        n_estimators = params['n_estimators']
     else:
-        raise ValueError("No such model...")
+        if model_nm in ['lightgbm', 'lgbm', 'lgb']:
+            # Perform n_folds cross validation
+            cv_dict = lgb.cv(params,
+                             train_set,
+                             num_boost_round=5000,
+                             folds=folds,
+                             nfold=nfold,
+                             stratified=False,
+                             shuffle=False,
+                             metrics=None,
+                             fobj=None,
+                             feval=None,
+                             init_model=None,
+                             feature_name='auto',
+                             categorical_feature='auto',
+                             early_stopping_rounds=200,
+                             fpreproc=None,
+                             verbose_eval=30,
+                             show_stdv=True,
+                             seed=0,
+                             callbacks=None)
+            # Extract the min rmse/mae, Loss must be minimized
+            loss = np.min(cv_dict['%s-mean' % LGB_METRIC])
+            # Boosting rounds that returned the lowest cv rmse/mae
+            n_estimators = int(np.argmin(cv_dict['%s-mean' % LGB_METRIC]) + 1)
+        elif model_nm in ['xgboost', 'xgb']:
+            cv_dict = xgb.cv(params,
+                             train_set,
+                             num_boost_round=5000,
+                             nfold=nfold,
+                             stratified=False,
+                             folds=folds,
+                             early_stopping_rounds=200,
+                             as_pandas=False,
+                             verbose_eval=30,
+                             seed=0,
+                             shuffle=False)
+
+            # Extract the min rmse/mae, Loss must be minimized
+            loss = np.min(cv_dict['test-%s-mean' % XGB_METRIC])
+            # Boosting rounds that returned the lowest cv rmse/mae
+            n_estimators = int(
+                np.argmin(cv_dict['test-%s-mean' % XGB_METRIC]) + 1)
+
+        elif model_nm in ['rf', 'et']:
+            try:
+                X_train, y_train = train_set
+            except Exception as e:
+                print("Error in assignment..", e)
+                print(
+                    "train_set should be a tuple or list containing <X_train, y_train>"
+                )
+                raise
+            if nfold is None:
+                cv = folds
+            else:
+                cv = nfold
+            scores = sk_cv(model_nm=model_nm,
+                           params=params,
+                           X_train=X_train,
+                           y_train=y_train,
+                           cv=cv)
+            # Extract the min rmse/mae, Loss must be minimized
+            loss = -scores.mean()  # scores returns negative!
+
+            # All scorer objects follow the convention that higher return values are better than lower return values.
+            # Thus metrics which measure the distance between the model and the data, like metrics.mean_squared_error,
+            # are available as neg_mean_squared_error which return the negated value of the metric.
+
+            n_estimators = params['n_estimators']
+        else:
+            raise ValueError("No such model...")
     run_time = timer() - start
     # Write to the csv file ('a' means append)
     if writetoFile:
@@ -384,12 +395,18 @@ def post_hyperopt(bayes_trials, train_set, model_nm, folds=None, nfold=5):
 
 def main_tuning_with_bo(X_train,
                         y_train,
-                        model_nm,
+                        X_val=None,
+                        y_val=None,
+                        model_nm='LGBM',
                         max_evals=100,
                         folds=5,
                         nfold=None,
                         eval_metric='l2',
                         task='regression'):
+    """
+    Args:
+        if X_val and y_val are assigned, cv will not be used for validation.
+    """
 
     SPACE_DICT = load_space(task)
     parse_metric(eval_metric)
@@ -400,13 +417,18 @@ def main_tuning_with_bo(X_train,
     _ITERATION = 0
     model_nm = parse_model_nm(model_nm)
     TRAIN_SET = build_train_set(X_train, y_train, model_nm=model_nm)
-    #     SPACE_DICT ={'RF':rf_space, 'ET':et_space, 'XGB':xgb_space, 'LGB':lgb_space}
+    if (X_val is not None) and (y_val is not None):
+        VAL_SET = build_train_set(X_val, y_val, model_nm=model_nm)
+    else:
+        VAL_SET = None
+    # SPACE_DICT ={'RF':rf_space, 'ET':et_space, 'XGB':xgb_space, 'LGB':lgb_space}
     SPACE = SPACE_DICT[model_nm]
     # update metric key in SPACE
     SPACE = update_metric(space=SPACE, model_nm=model_nm)
     # (params, train_set, model_nm='LGBM', folds=None, nfold=5, writetoFile=True)
     func_objective = partial(objective_base,
                              train_set=TRAIN_SET,
+                             val_set=VAL_SET,
                              model_nm=model_nm,
                              folds=folds,
                              nfold=nfold,
