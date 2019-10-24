@@ -86,6 +86,7 @@ def sk_cv(model_nm, params, X_train, y_train, cv):
 def objective_base(params,
                    train_set,
                    model_nm='LGBM',
+                   use_cv=True,
                    folds=None,
                    nfold=5,
                    writetoFile=True):
@@ -93,6 +94,7 @@ def objective_base(params,
     Objective function for Gradient Boosting Machine Hyperparameter Optimization
     Args:
         folds: This argument has highest priority over other data split arguments.
+        use_cv: boolean, default True, if False, train_test_split will be used.
     
     Return:
     
@@ -114,6 +116,11 @@ def objective_base(params,
     logging.info("############################")
     logging.info(f"{model_nm} CV Running...")
     logging.info("############################")
+
+    if not use_cv:
+        pass
+        
+
 
     if model_nm in ['lightgbm', 'lgbm', 'lgb']:
         # Perform n_folds cross validation
@@ -182,6 +189,7 @@ def objective_base(params,
         # All scorer objects follow the convention that higher return values are better than lower return values.
         # Thus metrics which measure the distance between the model and the data, like metrics.mean_squared_error,
         # are available as neg_mean_squared_error which return the negated value of the metric.
+        
         n_estimators = params['n_estimators']
     else:
         raise ValueError("No such model...")
