@@ -22,7 +22,7 @@ BASE_DIR = os.getcwd()  # current working directory
 
 def parse_metric(metrics):
     global ET_RF_SCORER, ET_RF_METRIC, LGB_METRIC, XGB_METRIC
-    if metrics.upper() in ['L2', 'RMSE']: # L2 and rmse are combined here
+    if metrics.upper() in ['L2', 'RMSE']:  # L2 and rmse are combined here
 
         def _calc_rmse(y, y_pred):
             return np.sqrt(np.mean((y - y_pred)**2))
@@ -122,11 +122,12 @@ def objective_base(params,
             model_lgb = lgb.train(params,
                                   train_set,
                                   num_boost_round=5000,
-                                  valid_sets=[val_set],
+                                  valid_sets=[train_set, val_set],
+                                  verbose_eval=50,
                                   early_stopping_rounds=200)
-            
-            loss = model_lgb.best_score['valid_1'][LGB_METRIC] # use the first eval metric for default
-            n_estimators = gbm.best_iteration
+            loss = model_lgb.best_score['valid_1'][
+                LGB_METRIC]  # use the first eval metric for default
+            n_estimators = model_lgb.best_iteration
         else:
             ### Todo ###
             raise ValeError(f"{model_nm} is not supported now!")
@@ -270,7 +271,12 @@ def build_train_set(X_train, y_train, model_nm):
     return train_set
 
 
-def post_hyperopt(bayes_trials, train_set, model_nm, folds=None, nfold=5):
+def post_hyperopt(bayes_trials,
+                  train_set,
+                  val_set,
+                  model_nm=None,
+                  folds=None,
+                  nfold=5):
 
     model_nm = model_nm.lower()
     # get best params
@@ -282,67 +288,86 @@ def post_hyperopt(bayes_trials, train_set, model_nm, folds=None, nfold=5):
     _best_loss = bayes_results.loc[0, 'loss']
     # best n_estimators with big learning rate
     _best_estimators = bayes_results.loc[0, 'estimators']
+    if val_set is not None:
+        if model_nm in ['lgb', 'lgbm', 'lightgbm']:
+            # [get best loss and trees]
+            best_params['learning_rate'] = 0.01
 
-    #     print(f"best_loss_:{best_loss_}")
-    if model_nm in ['xgboost', 'xgb']:
-        # get best loss and trees
-        best_params['learning_rate'] = 0.01
-        # Perform n_folds cross validation
-        cv_dict = xgb.cv(best_params,
-                         train_set,
-                         num_boost_round=5000,
-                         folds=folds,
-                         nfold=nfold,
-                         stratified=False,
-                         shuffle=False,
-                         early_stopping_rounds=100,
-                         as_pandas=False,
-                         verbose_eval=30,
-                         seed=2019)
-        # Extract the min rmse/mae, Loss must be minimized
-        loss = np.min(cv_dict['test-%s-mean' % XGB_METRIC])
-        # Boosting rounds that returned the lowest cv rmse/mae
-        n_estimators = int(np.argmin(cv_dict['test-%s-mean' % XGB_METRIC]) + 1)
-        best_params['n_estimators'] = n_estimators
-
-    elif model_nm in ['lgb', 'lgbm', 'lightgbm']:
-        # [get best loss and trees]
-        best_params['learning_rate'] = 0.01
-        # [Perform n_folds cross validation]
-        cv_dict = lgb.cv(best_params,
-                         train_set,
-                         num_boost_round=5000,
-                         folds=folds,
-                         nfold=nfold,
-                         stratified=False,
-                         shuffle=False,
-                         feature_name='auto',
-                         categorical_feature='auto',
-                         early_stopping_rounds=100,
-                         verbose_eval=30,
-                         seed=2019)
-        # Extract the min rmse/mae, Loss must be minimized
-        loss = np.min(cv_dict['%s-mean' % LGB_METRIC])
-        # Boosting rounds that returned the lowest cv rmse/mae
-        n_estimators = int(np.argmin(cv_dict['%s-mean' % LGB_METRIC]) + 1)
-        best_params['n_estimators'] = n_estimators
-
-    elif model_nm in ['rf', 'et']:
-        if nfold is None:
-            cv = folds
+            model_lgb = lgb.train(best_params,
+                                  train_set,
+                                  num_boost_round=5000,
+                                  valid_sets=[train_set, val_set],
+                                  verbose_eval=50,
+                                  early_stopping_rounds=200)
+            loss = model_lgb.best_score['valid_1'][
+                LGB_METRIC]  # use the first eval metric for default
+            n_estimators = model_lgb.best_iteration
+            best_params['n_estimators'] = n_estimators
         else:
-            cv = nfold
-        n_estimators = 1000
-        best_params['n_estimators'] = n_estimators
-        X_train, y_train = train_set
-        scores = sk_cv(model_nm=model_nm,
-                       params=best_params,
-                       X_train=X_train,
-                       y_train=y_train,
-                       cv=cv)
-        loss = -scores.mean()
+            ### Todo ###
+            raise ValeError(f"{model_nm} is not supported now!")
     else:
-        raise ValueError(f"model_nm: {model_nm} is a bug...")
+        #     print(f"best_loss_:{best_loss_}")
+        if model_nm in ['xgboost', 'xgb']:
+            # get best loss and trees
+            best_params['learning_rate'] = 0.01
+            # Perform n_folds cross validation
+            cv_dict = xgb.cv(best_params,
+                             train_set,
+                             num_boost_round=5000,
+                             folds=folds,
+                             nfold=nfold,
+                             stratified=False,
+                             shuffle=False,
+                             early_stopping_rounds=100,
+                             as_pandas=False,
+                             verbose_eval=30,
+                             seed=2019)
+            # Extract the min rmse/mae, Loss must be minimized
+            loss = np.min(cv_dict['test-%s-mean' % XGB_METRIC])
+            # Boosting rounds that returned the lowest cv rmse/mae
+            n_estimators = int(
+                np.argmin(cv_dict['test-%s-mean' % XGB_METRIC]) + 1)
+            best_params['n_estimators'] = n_estimators
+
+        elif model_nm in ['lgb', 'lgbm', 'lightgbm']:
+            # [get best loss and trees]
+            best_params['learning_rate'] = 0.01
+            # [Perform n_folds cross validation]
+            cv_dict = lgb.cv(best_params,
+                             train_set,
+                             num_boost_round=5000,
+                             folds=folds,
+                             nfold=nfold,
+                             stratified=False,
+                             shuffle=False,
+                             feature_name='auto',
+                             categorical_feature='auto',
+                             early_stopping_rounds=100,
+                             verbose_eval=30,
+                             seed=2019)
+            # Extract the min rmse/mae, Loss must be minimized
+            loss = np.min(cv_dict['%s-mean' % LGB_METRIC])
+            # Boosting rounds that returned the lowest cv rmse/mae
+            n_estimators = int(np.argmin(cv_dict['%s-mean' % LGB_METRIC]) + 1)
+            best_params['n_estimators'] = n_estimators
+
+        elif model_nm in ['rf', 'et']:
+            if nfold is None:
+                cv = folds
+            else:
+                cv = nfold
+            n_estimators = 1000
+            best_params['n_estimators'] = n_estimators
+            X_train, y_train = train_set
+            scores = sk_cv(model_nm=model_nm,
+                           params=best_params,
+                           X_train=X_train,
+                           y_train=y_train,
+                           cv=cv)
+            loss = -scores.mean()
+        else:
+            raise ValueError(f"model_nm: {model_nm} is a bug...")
 
     logging.info(f"best loss: {loss}, best n_estimators: {n_estimators}")
     logging.info(f"best params: {best_params}")
@@ -443,6 +468,7 @@ def main_tuning_with_bo(X_train,
 
     best_params, loss = post_hyperopt(bayes_trials,
                                       train_set=TRAIN_SET,
+                                      val_set=VAL_SET,
                                       model_nm=model_nm,
                                       folds=folds,
                                       nfold=nfold)
