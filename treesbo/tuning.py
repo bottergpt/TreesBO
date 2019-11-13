@@ -47,7 +47,8 @@ def parse_metric(metrics):
         LGB_METRIC = 'l1'
         XGB_METRIC = 'mae'
     else:
-        raise ValueError(f"metrics: {metrics} is not supported now!")
+        LGB_METRIC = metrics
+#         raise ValueError(f"metrics: {metrics} is not supported now!")
 
 
 def update_metric(space, model_nm):
@@ -137,9 +138,14 @@ def objective_base(params,
                          seed=0,
                          callbacks=None)
         # Extract the min rmse/mae, Loss must be minimized
-        loss = np.min(cv_dict['%s-mean' % LGB_METRIC])
-        # Boosting rounds that returned the lowest cv rmse/mae
-        n_estimators = int(np.argmin(cv_dict['%s-mean' % LGB_METRIC]) + 1)
+        if LGB_METRIC == 'auc':
+            loss = -np.max(cv_dict['%s-mean' % LGB_METRIC])
+            n_estimators = int(np.argmax(cv_dict['%s-mean' % LGB_METRIC]) + 1)
+            
+        else:
+            loss = np.min(cv_dict['%s-mean' % LGB_METRIC])        
+            # Boosting rounds that returned the lowest cv rmse/mae
+            n_estimators = int(np.argmin(cv_dict['%s-mean' % LGB_METRIC]) + 1)
     elif model_nm in ['xgboost', 'xgb']:
         cv_dict = xgb.cv(params,
                          train_set,
@@ -303,9 +309,14 @@ def post_hyperopt(bayes_trials, train_set, model_nm, folds=None, nfold=5):
                          verbose_eval=30,
                          seed=2019)
         # Extract the min rmse/mae, Loss must be minimized
-        loss = np.min(cv_dict['%s-mean' % LGB_METRIC])
-        # Boosting rounds that returned the lowest cv rmse/mae
-        n_estimators = int(np.argmin(cv_dict['%s-mean' % LGB_METRIC]) + 1)
+        if LGB_METRIC == 'auc':
+            loss = - np.max(cv_dict['%s-mean' % LGB_METRIC])
+            n_estimators = int(np.argmax(cv_dict['%s-mean' % LGB_METRIC]) + 1)
+            
+        else:
+            loss = np.min(cv_dict['%s-mean' % LGB_METRIC])        
+            # Boosting rounds that returned the lowest cv rmse/mae
+            n_estimators = int(np.argmin(cv_dict['%s-mean' % LGB_METRIC]) + 1)
         best_params['n_estimators'] = n_estimators
 
     elif model_nm in ['rf', 'et']:

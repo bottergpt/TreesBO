@@ -20,3 +20,6 @@ lgb_space = {
 }
 
 # 'min_sum_hessian_in_leaf': hp.uniform('min_sum_hessian_in_leaf', 0.0, 10.0),
+SPACE_DICT = {
+    'LGB': lgb_space
+}
