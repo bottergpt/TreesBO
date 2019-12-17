@@ -15,38 +15,49 @@ import xgboost as xgb
 import lightgbm as lgb
 import logging
 from sklearn.metrics import make_scorer
-from .utils import *
+try:
+    from .utils import *
+except:
+    from utils import *
 
 BASE_DIR = os.getcwd()  # current working directory
 
-def parse_metric(metrics):
-    global ET_RF_SCORER, ET_RF_METRIC, LGB_METRIC, XGB_METRIC
-    if metrics.upper() in ['L2', 'RMSE']:  # L2 and rmse are combined here
 
-        def _calc_rmse(y, y_pred):
-            return np.sqrt(np.mean((y - y_pred)**2))
+class MetricParser(object):
+    @classmethod
+    def parse(cls, metrics):
+        if metrics.upper() in ['L2', 'RMSE']:  # L2 and rmse are combined here
 
-        # Creating root mean square error for sklearns crossvalidation
-        ET_RF_SCORER = make_scorer(_calc_rmse, greater_is_better=False)
-        ET_RF_METRIC = 'mse'
-        LGB_METRIC = 'rmse'
-        XGB_METRIC = 'rmse'
-    elif metrics.upper() in ['L1']:
-        #         ET_RF_SCORER = 'neg_mean_absolute_error'
-        #         ET_RF_METRIC = 'mae'
-        def _calc_rmse(y, y_pred):
-            return np.sqrt(np.mean((y - y_pred)**2))
+            def _calc_rmse(y, y_pred):
+                return np.sqrt(np.mean((y - y_pred)**2))
 
-        # Creating root mean square error for sklearns crossvalidation
-        ET_RF_SCORER = make_scorer(_calc_rmse, greater_is_better=False)
-        ET_RF_METRIC = 'mse'
-        logging.warn(
-            f" sklearn's RF or ET is quite slow to train when using L1 criterion! \nSo it will be used L2 istead here!"
-        )
-        LGB_METRIC = 'l1'
-        XGB_METRIC = 'mae'
-    else:
-        raise ValueError(f"metrics: {metrics} is not supported now!")
+            # Creating root mean square error for sklearns crossvalidation
+            ET_RF_SCORER = make_scorer(_calc_rmse, greater_is_better=False)
+            ET_RF_METRIC = 'mse'
+            LGB_METRIC = 'rmse'
+            XGB_METRIC = 'rmse'
+        elif metrics.upper() in ['L1']:
+            #         ET_RF_SCORER = 'neg_mean_absolute_error'
+            #         ET_RF_METRIC = 'mae'
+            def _calc_rmse(y, y_pred):
+                return np.sqrt(np.mean((y - y_pred)**2))
+
+            # Creating root mean square error for sklearns crossvalidation
+            ET_RF_SCORER = make_scorer(_calc_rmse, greater_is_better=False)
+            ET_RF_METRIC = 'mse'
+            logging.warn(
+                f" sklearn's RF or ET is quite slow to train when using L1 criterion! \nSo it will be used L2 istead here!"
+            )
+            LGB_METRIC = 'l1'
+            XGB_METRIC = 'mae'
+        else:
+            raise ValueError(f"metrics: {metrics} is not supported now!")
+        m = cls.__new__(cls)
+        m.ET_RF_SCORER = ET_RF_SCORER
+        m.ET_RF_METRIC = ET_RF_METRIC
+        m.LGB_METRIC = LGB_METRIC
+        m.XGB_METRIC = XGB_METRIC
+        return m
 
 
 def update_metric(space, model_nm):
@@ -242,8 +253,6 @@ def objective_base(params,
         'train_time': run_time,
         'status': STATUS_OK
     }
-
-
 
 
 def post_hyperopt(bayes_trials,
