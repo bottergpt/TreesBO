@@ -19,7 +19,6 @@ from .utils import *
 
 BASE_DIR = os.getcwd()  # current working directory
 
-
 def parse_metric(metrics):
     global ET_RF_SCORER, ET_RF_METRIC, LGB_METRIC, XGB_METRIC
     if metrics.upper() in ['L2', 'RMSE']:  # L2 and rmse are combined here
@@ -245,30 +244,6 @@ def objective_base(params,
     }
 
 
-def build_train_set(X_train, y_train, model_nm):
-
-    isX_df = isinstance(X_train, pd.DataFrame)
-    isY_sr = isinstance(y_train, pd.Series)
-    isY_df = isinstance(y_train, pd.DataFrame)
-    if isY_df:
-        raise TypeError(
-            f"y_train is df, with the shape {y_train.shape}, which is not supportable now."
-        )
-    model_nm = model_nm.lower()
-    if isX_df ^ isY_sr:
-        raise TypeError(f"X_train and y_train have different types!")
-    if model_nm in ['xgb', 'xgboost']:
-        if isX_df:
-            train_set = xgb.DMatrix(X_train.values, y_train.values)
-        else:
-            train_set = xgb.DMatrix(X_train, y_train)
-    elif model_nm in ['lgb', 'lgbm', 'lightgbm']:
-        train_set = lgb.Dataset(X_train, y_train)
-    elif model_nm in ['et', 'rf']:
-        train_set = (X_train, y_train)
-    else:
-        raise ValueError(f"{model_nm} is a bug...")
-    return train_set
 
 
 def post_hyperopt(bayes_trials,
