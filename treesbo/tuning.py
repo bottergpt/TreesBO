@@ -418,7 +418,7 @@ def main_tuning_with_bo(X_train,
     """
 
     SPACE_DICT = load_space(task)
-    parse_metric(eval_metric)
+    metric_helper = MetricParser().parse(eval_metric)
     # Keep track of results
     bayes_trials = Trials()
     # Global variable

@@ -1,4 +1,5 @@
 example/hyperopt_output/
 example/.ipynb_checkpoints
+example/test.ipynb
 treesbo/__pycache__/
 treesbo/space_config/__pycache__/
