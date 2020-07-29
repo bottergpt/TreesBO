@@ -5,7 +5,8 @@ lgb_space = {
     'seed': 2019,
     'metric': 'rmse',
     'n_jobs': -1,
-    'learning_rate': 0.05, # 'learning_rate': hp.choice('learning_rate', [0.05, 0.01]),
+    'learning_rate': 0.05,  
+    # 'learning_rate': hp.choice('learning_rate', [0.05, 0.01]),
     'boosting_type': 'gbdt',
     'bagging_fraction': hp.uniform('bagging_fraction', 0.1, 1.0),
     'feature_fraction': hp.uniform('feature_fraction', 0.1, 1.0),
@@ -18,7 +19,6 @@ lgb_space = {
     'reg_lambda': hp.uniform('reg_lambda', 0.0, 10.0)
 }
 # 'min_sum_hessian_in_leaf': hp.uniform('min_sum_hessian_in_leaf', 0.0, 10.0),
-
 
 # Define the search space [XGB]
 xgb_space = {
