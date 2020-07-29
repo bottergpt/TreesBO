@@ -1,10 +1,7 @@
 import xgboost as xgb
 import lightgbm as lgb
 import pandas as pd
-import numpy as np
 
-def _calc_rmse(y, y_pred):
-    return np.sqrt(np.mean((y - y_pred)**2))
 
 def load_space(task):
     if task.lower() in ['regression', 'r']:
