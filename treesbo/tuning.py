@@ -15,10 +15,7 @@ import xgboost as xgb
 import lightgbm as lgb
 import logging
 from sklearn.metrics import make_scorer
-try:
-    from .utils import *
-except:
-    from utils import *
+from .utils import *
 
 BASE_DIR = os.getcwd()  # current working directory
 
