@@ -1,7 +1,8 @@
 # TreesBO
 Bayesian optimization for tree based models.
 
-To use hyperopt, we must describe the search space for it at first.
+## regression
+LGBM/XGB/ET/RF are supported.
 
 ## classification
 LGBM is supported only.
